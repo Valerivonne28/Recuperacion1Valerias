@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1
+
+# Comments are provided throughout this file to help you get started.
+# If you need more help, visit the Dockerfile reference guide at    # guia para dockerfile
+# https://docs.docker.com/engine/reference/builder/
+
+ARG PYTHON_VERSION=3.11.4
+FROM python:${PYTHON_VERSION}-slim as base
+
+# Evita que Python escriba archivos pyc.
+ENV PYTHONDONTWRITEBYTECODE=1
+
+      # Evita que Python almacene en buffer stdout y stderr para evitar situaciones donde
+# la aplicación se cuelga sin emitir ningún log debido al buffering.
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Crea un usuario sin privilegios bajo el que se ejecutará la aplicación.
+# See https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#user
+ARG UID=10001
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    appuser
+
+# Descarga las dependencias como un paso separado para aprovechar la caché de Docker.
+# Aprovechar un montaje de caché en /root/.cache/pip para acelerar las construcciones posteriores.
+# Aprovechar un bind mount a requirements.txt para evitar tener que copiarlos en
+# en esta capa.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=bind,source=requirements.txt,target=requirements.txt \
+    python -m pip install -r requirements.txt
+
+# Cambia al usuario sin privilegios para ejecutar la aplicación.
+USER appuser
+
+ # Copia el código fuente en el contenedor.
+COPY . .
+
+# Exponer el puerto en el que escucha la aplicación.
+EXPOSE 5000
+
+# Ejecuta la aplicacion 
+CMD ["flask", "--app", "app", "--debug", "run", "--host=0.0.0.0", "--port=5000"]
